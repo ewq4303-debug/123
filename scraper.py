@@ -30,27 +30,22 @@ class YahooTaiwanCrawler:
         soup = self.fetch_html("institutional-trading")
         if not soup: return None
         
-        # Yahoo 的資料通常放在特定的 List (li) 中，這裡是抓取「最新一日」的資料範例
-        # 實務上 Yahoo 的 class names (如 Jc(c), Fz(14px)) 是動態產生的 Tailwind-like CSS
-        # 穩健的作法是找到表格的資料列 (通常是 ul 下的 li 結構)
-        
         data = {}
         try:
-            # 尋找包含「外資」、「投信」、「自營商」字眼的資料區塊
-            # 這裡簡化邏輯：抓取頁面中第一個出現的數值列（通常是最新交易日）
+            # 尋找包含「外資」的資料列
             rows = soup.find_all('li', class_='List(n)') 
-            
-            # 根據 Yahoo 網頁結構，逐行尋找當日買賣超數值
-            # 註：因為網頁排版會隨時變動，這裡示範的是概念性的標籤提取
             for row in rows:
-                cols = row.find_all('div')
-                if len(cols) >= 5 and "外資" in soup.text: 
-                    # 假設能夠精準定位到該列
-                    # data['外資買賣超'] = cols[1].text.strip()
-                    pass
-            
-            # 為了讓您馬上能測試，我用一個安全的 fallback 來模擬抓取結果
-            data = {"外資買賣超": "需根據目前最新的 HTML 標籤 class 進行微調提取"}
+                if '外資' in row.text:
+                    # 抓取該列裡面的所有欄位數字
+                    cols = row.find_all('span')
+                    if len(cols) >= 2:
+                        # 抓取買賣超數字
+                        data["外資買賣超"] = cols[1].text.strip()
+                    break # 找到最新一筆就跳出迴圈
+                    
+            if not data:
+                data = {"外資買賣超": "無法解析，需重新檢查網頁結構"}
+                
             return data
         except Exception as e:
             return f"Parsing Error: {e}"
