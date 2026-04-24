@@ -25,30 +25,44 @@ class YahooTaiwanCrawler:
             return None
 
     def get_institutional_trading(self):
-        """抓取三大法人籌碼變化"""
-        print(f"Fetching Institutional Trading for {self.stock_id}...")
+        """抓取『法人逐日買賣超』最新一筆資料與資料日期"""
+        print(f"Fetching Daily Institutional Data for {self.stock_id}...")
         soup = self.fetch_html("institutional-trading")
         if not soup: return None
         
         data = {}
         try:
-            # 尋找包含「外資」的資料列
-            rows = soup.find_all('li', class_='List(n)') 
+            # 1. 抓取網頁右上角的「資料時間」
+            # 通常在一個包含 '資料時間' 字眼的 div 或 span 中
+            time_element = soup.find('span', string=lambda t: t and '資料時間' in t)
+            if not time_element:
+                # 備案：搜尋所有文字包含資料時間的區塊
+                time_text = soup.find(text=lambda t: t and '資料時間' in t)
+                data['資料日期'] = time_text.split('：')[-1].strip() if time_text else "未找到日期"
+            else:
+                data['資料日期'] = time_element.text.split('：')[-1].strip()
+
+            # 2. 抓取「法人逐日買賣超」表格的第一列
+            # 我們尋找包含日期格式（如 2026/04/23）的列表項目
+            rows = soup.find_all('li', class_='List(n)')
+            
             for row in rows:
-                if '外資' in row.text:
-                    # 抓取該列裡面的所有欄位數字
-                    cols = row.find_all('span')
-                    if len(cols) >= 2:
-                        # 抓取買賣超數字
-                        data["外資買賣超"] = cols[1].text.strip()
-                    break # 找到最新一筆就跳出迴圈
-                    
-            if not data:
-                data = {"外資買賣超": "無法解析，需重新檢查網頁結構"}
-                
+                cols = row.find_all('div')
+                # 逐日表的特徵：第一欄通常是日期格式 (XXXX/XX/XX)
+                if len(cols) >= 6:
+                    date_val = cols[0].text.strip()
+                    if '/' in date_val and len(date_val) >= 8:
+                        # 這就是「法人逐日買賣超」的第一列
+                        data["交易日期"] = date_val
+                        data["外資(張)"] = cols[1].text.strip()
+                        data["投信(張)"] = cols[2].text.strip()
+                        data["自營商(張)"] = cols[3].text.strip()
+                        data["合計(張)"] = cols[4].text.strip()
+                        break # 抓到最新一筆（最上方那一列）就停止
+            
             return data
         except Exception as e:
-            return f"Parsing Error: {e}"
+            return {"Error": f"解析失敗: {str(e)}"}
 
     def get_margin_trading(self):
         """抓取資券變化"""
