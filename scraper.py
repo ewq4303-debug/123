@@ -65,20 +65,36 @@ class YahooTaiwanCrawler:
             return {"Error": f"解析失敗: {str(e)}"}
 
     def get_margin_trading(self):
-        """抓取資券變化"""
-        print(f"Fetching Margin Trading for {self.stock_id}...")
+        """抓取『資券餘額逐日增減』最新一筆資料"""
+        print(f"Fetching Margin Trading Data for {self.stock_id}...")
         soup = self.fetch_html("margin")
         if not soup: return None
         
-        # 抓取融資融券餘額、增減比例等
         data = {}
         try:
-            # 邏輯與法人相同：尋找特定表格列
-            # 例：找到標題為「融資餘額」的區塊，並提取其下方的數字
-            data = {"資券變化": "HTML 解析邏輯區塊"}
+            # 尋找包含資料的表格列
+            rows = soup.find_all('li', class_='List(n)')
+            
+            for row in rows:
+                # 再次使用必殺技：剝除標籤，只取純文字陣列
+                cols = list(row.stripped_strings)
+                
+                # 判斷第一個元素是不是日期，並且確認陣列長度足夠 (至少要能抓到 index 7)
+                if len(cols) >= 8 and '/' in cols[0] and len(cols[0]) >= 8:
+                    # 依照我們剛剛分析的索引位置，把數字抓出來
+                    data["資料日期"] = cols[0]
+                    data["融資增減"] = cols[1]
+                    data["融資使用率"] = cols[3]
+                    data["融券餘額"] = cols[5]
+                    data["券資比"] = cols[7]
+                    break # 抓到最新一日的資料就跳出迴圈
+            
+            if not data:
+                data = {"Error": "找不到符合格式的資券資料"}
+                
             return data
         except Exception as e:
-            return None
+            return {"Error": f"解析失敗: {str(e)}"}
 
     def get_major_holders(self):
         """抓取大戶、董監持股變化"""
