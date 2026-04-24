@@ -33,33 +33,33 @@ class YahooTaiwanCrawler:
         data = {}
         try:
             # 1. 抓取網頁右上角的「資料時間」
-            # 通常在一個包含 '資料時間' 字眼的 div 或 span 中
-            time_element = soup.find('span', string=lambda t: t and '資料時間' in t)
-            if not time_element:
-                # 備案：搜尋所有文字包含資料時間的區塊
-                time_text = soup.find(text=lambda t: t and '資料時間' in t)
-                data['資料日期'] = time_text.split('：')[-1].strip() if time_text else "未找到日期"
+            # bs4 建議使用 string 來搜尋純文字節點
+            time_element = soup.find(string=lambda t: t and '資料時間' in t)
+            if time_element:
+                data['資料日期'] = time_element.split('：')[-1].strip()
             else:
-                data['資料日期'] = time_element.text.split('：')[-1].strip()
+                data['資料日期'] = "抓取不到"
 
             # 2. 抓取「法人逐日買賣超」表格的第一列
-            # 我們尋找包含日期格式（如 2026/04/23）的列表項目
             rows = soup.find_all('li', class_='List(n)')
             
             for row in rows:
-                cols = row.find_all('div')
-                # 逐日表的特徵：第一欄通常是日期格式 (XXXX/XX/XX)
-                if len(cols) >= 6:
-                    date_val = cols[0].text.strip()
-                    if '/' in date_val and len(date_val) >= 8:
-                        # 這就是「法人逐日買賣超」的第一列
-                        data["交易日期"] = date_val
-                        data["外資(張)"] = cols[1].text.strip()
-                        data["投信(張)"] = cols[2].text.strip()
-                        data["自營商(張)"] = cols[3].text.strip()
-                        data["合計(張)"] = cols[4].text.strip()
-                        break # 抓到最新一筆（最上方那一列）就停止
+                # 🚀 爬蟲必殺技：stripped_strings 自動剝除所有 HTML 標籤，只留下乾淨的陣列
+                # 它會把這行變成像是 ['2026/04/23', '7,193', '754', '-1,379', '6,569', '70.95%']
+                cols = list(row.stripped_strings)
+                
+                # 判斷這個陣列的第一個元素是不是日期 (包含 '/')
+                if len(cols) >= 5 and '/' in cols[0] and len(cols[0]) >= 8:
+                    data["交易日期"] = cols[0]
+                    data["外資(張)"] = cols[1]
+                    data["投信(張)"] = cols[2]
+                    data["自營商(張)"] = cols[3]
+                    data["合計(張)"] = cols[4]
+                    break # 抓到最新一筆就跳出迴圈
             
+            if not data:
+                data = {"Error": "找不到符合格式的資料列"}
+                
             return data
         except Exception as e:
             return {"Error": f"解析失敗: {str(e)}"}
