@@ -1,6 +1,8 @@
 import requests
 from bs4 import BeautifulSoup
 import time
+import json # 在檔案最上方加入這個 import
+import os
 
 class YahooTaiwanCrawler:
     def __init__(self, stock_id):
@@ -142,4 +144,29 @@ class YahooTaiwanCrawler:
 if __name__ == "__main__":
     crawler = YahooTaiwanCrawler("2330")
     final_data = crawler.run_all()
-    print(final_data)
+    
+    # 準備存檔的路徑
+    file_path = "stock_data.json"
+    
+    # 讀取舊的歷史資料（如果有的話）
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as f:
+            try:
+                history_data = json.load(f)
+            except:
+                history_data = {}
+    else:
+        history_data = {}
+        
+    # 以「今日日期」為 Key，將新抓到的資料存進去
+    # 假設 final_data 裡面有您抓到的日期，例如 '2026/04/24'
+    # 這裡簡化處理，直接抓取現在時間當作 Key
+    import datetime
+    today = datetime.datetime.now().strftime("%Y-%m-%d")
+    history_data[today] = final_data
+    
+    # 把更新後的資料寫回檔案
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(history_data, f, ensure_ascii=False, indent=2)
+        
+    print(f"資料已成功儲存至 {file_path}")
