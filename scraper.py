@@ -97,19 +97,34 @@ class YahooTaiwanCrawler:
             return {"Error": f"解析失敗: {str(e)}"}
 
     def get_major_holders(self):
-        """抓取大戶、董監持股變化"""
-        print(f"Fetching Major Holders for {self.stock_id}...")
+        """抓取『大戶籌碼』最新一筆資料"""
+        print(f"Fetching Major Holders Data for {self.stock_id}...")
         soup = self.fetch_html("major-holders")
         if not soup: return None
         
-        # 董監持股比例通常會有一個大字體顯示
         data = {}
         try:
-            # 尋找頁面中特定的百分比文字區塊
-            data = {"大戶持股比例": "HTML 解析邏輯區塊"}
+            # 尋找包含資料的表格列
+            rows = soup.find_all('li', class_='List(n)')
+            
+            for row in rows:
+                # 使用 stripped_strings 剝除標籤，轉為乾淨的純文字陣列
+                cols = list(row.stripped_strings)
+                
+                # 判斷第一個元素是不是日期，並且確認陣列長度足夠
+                if len(cols) >= 4 and '/' in cols[0] and len(cols[0]) >= 8:
+                    data["資料日期"] = cols[0]
+                    data["外資籌碼"] = cols[1]
+                    data["大戶籌碼"] = cols[2]
+                    data["董監持股"] = cols[3]
+                    break # 抓到最新一筆資料就跳出迴圈
+            
+            if not data:
+                data = {"Error": "找不到符合格式的持股資料"}
+                
             return data
         except Exception as e:
-            return None
+            return {"Error": f"解析失敗: {str(e)}"}
 
     def run_all(self):
         result = {"Stock ID": self.stock_id}
