@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>台股數據查詢</title>
+</head>
+<body>
+    <h1>台股 2330 每日數據查詢</h1>
+    
+    <label for="datePicker">選擇日期：</label>
+    <input type="date" id="datePicker">
+    <button onclick="fetchData()">查詢</button>
+
+    <div id="result" style="margin-top: 20px; font-family: monospace;">
+        </div>
+
+    <script>
+        async function fetchData() {
+            const selectedDate = document.getElementById('datePicker').value;
+            const resultDiv = document.getElementById('result');
+            
+            if (!selectedDate) {
+                resultDiv.innerHTML = "請先選擇日期！";
+                return;
+            }
+
+            try {
+                // 讀取 GitHub Actions 每天存下來的那個檔案
+                const response = await fetch('stock_data.json');
+                const data = await response.json();
+                
+                // 檢查該日期是否有資料
+                if (data[selectedDate]) {
+                    // 把 JSON 資料格式化印在網頁上
+                    resultDiv.innerHTML = "<pre>" + JSON.stringify(data[selectedDate], null, 2) + "</pre>";
+                } else {
+                    resultDiv.innerHTML = `查無 ${selectedDate} 的資料。`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = "讀取資料失敗，可能檔案尚未建立。";
+            }
+        }
+    </script>
+</body>
+</html>
