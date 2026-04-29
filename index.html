@@ -2,42 +2,116 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>台股數據查詢</title>
+    <title>台股數據查詢系統 (全端升級版)</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
+        .control-panel { background: #f9f9f9; padding: 15px; border: 1px solid #ddd; margin-top: 15px; border-radius: 5px; }
+        input[type="text"], input[type="date"], input[type="password"] { padding: 5px; margin: 5px 0; }
+        button { padding: 5px 10px; cursor: pointer; }
+        #statusMessage { color: #d9534f; font-weight: bold; margin-top: 10px; }
+        #result { background: #eef2f5; padding: 15px; margin-top: 20px; white-space: pre-wrap; font-family: monospace; border-radius: 5px;}
+    </style>
 </head>
 <body>
-    <h1>台股 2330 每日數據查詢</h1>
+    <h1>台股 2330 每日數據查詢系統</h1>
     
-    <label for="datePicker">選擇日期：</label>
+    <label>選擇日期：</label>
     <input type="date" id="datePicker">
-    <button onclick="fetchData()">查詢</button>
+    <button onclick="fetchData()">查詢本機資料</button>
 
-    <div id="result" style="margin-top: 20px; font-family: monospace;">
-        </div>
+    <div id="statusMessage"></div>
+    <div id="result">請選擇日期進行查詢...</div>
+
+    <div id="backendPanel" class="control-panel" style="display: none;">
+        <h3>⚠️ 查無資料！是否呼叫後端爬蟲去抓取？</h3>
+        <p>這將會啟動 GitHub 伺服器，大約需要等待 <strong>3 ~ 5 分鐘</strong>。</p>
+        <label>請輸入您的 GitHub Token：</label>
+        <input type="password" id="githubToken" placeholder="ghp_xxxxxxxxxxxx" style="width: 250px;">
+        <button onclick="triggerBackend()" style="background: #0275d8; color: white;">啟動雲端爬蟲</button>
+    </div>
 
     <script>
-        async function fetchData() {
+        // 🚨 請把下面這兩個換成您自己的 GitHub 帳號與專案名稱！
+        const GITHUB_USER = "ewq4303-debug"; 
+        const GITHUB_REPO = "123";
+        
+        let pollingInterval;
+
+        async function fetchData(isPolling = false) {
             const selectedDate = document.getElementById('datePicker').value;
             const resultDiv = document.getElementById('result');
+            const statusDiv = document.getElementById('statusMessage');
+            const panel = document.getElementById('backendPanel');
             
-            if (!selectedDate) {
-                resultDiv.innerHTML = "請先選擇日期！";
-                return;
-            }
+            if (!selectedDate) { statusDiv.innerText = "請先選擇日期！"; return; }
 
             try {
-                // 讀取 GitHub Actions 每天存下來的那個檔案
-                const response = await fetch('stock_data.json');
+                // 加入時間戳記避免瀏覽器讀取到舊的暫存檔
+                const noCacheUrl = `stock_data.json?t=${new Date().getTime()}`;
+                const response = await fetch(noCacheUrl);
                 const data = await response.json();
                 
-                // 檢查該日期是否有資料
                 if (data[selectedDate]) {
-                    // 把 JSON 資料格式化印在網頁上
-                    resultDiv.innerHTML = "<pre>" + JSON.stringify(data[selectedDate], null, 2) + "</pre>";
+                    // 如果找到資料
+                    statusDiv.innerText = "✅ 查詢成功！";
+                    resultDiv.innerHTML = JSON.stringify(data[selectedDate], null, 2);
+                    panel.style.display = "none"; // 隱藏面板
+                    
+                    if (isPolling) {
+                        clearInterval(pollingInterval);
+                        statusDiv.innerText = "🎉 爬蟲執行完畢！新資料已自動載入。";
+                    }
                 } else {
-                    resultDiv.innerHTML = `查無 ${selectedDate} 的資料。`;
+                    // 如果找不到資料
+                    if (!isPolling) {
+                        statusDiv.innerText = `❌ 本機查無 ${selectedDate} 的資料。`;
+                        resultDiv.innerHTML = `目前系統擁有的日期：${Object.keys(data).join(", ") || '無'}`;
+                        panel.style.display = "block"; // 顯示呼叫爬蟲的面板
+                    }
                 }
             } catch (error) {
-                resultDiv.innerHTML = "讀取資料失敗，可能檔案尚未建立。";
+                statusDiv.innerText = "資料庫讀取失敗。";
+            }
+        }
+
+        async function triggerBackend() {
+            const token = document.getElementById('githubToken').value;
+            const statusDiv = document.getElementById('statusMessage');
+            const panel = document.getElementById('backendPanel');
+            
+            if (!token) { alert("請輸入 Token！"); return; }
+
+            statusDiv.innerText = "🔄 正在向 GitHub 發送爬蟲啟動指令...";
+            
+            try {
+                // 呼叫 GitHub API 觸發 main.yml
+                const response = await fetch(`https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/actions/workflows/main.yml/dispatches`, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/vnd.github.v3+json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ ref: 'main' })
+                });
+
+                if (response.ok) {
+                    panel.style.display = "none"; // 隱藏面板
+                    statusDiv.innerHTML = "🚀 <strong>爬蟲伺服器已成功啟動！</strong><br>伺服器正在開機 ➔ 下載套件 ➔ 爬取 Yahoo ➔ 寫入資料庫...<br>預計需要 3 到 5 分鐘，網頁將自動為您偵測最新狀態，請勿關閉網頁。";
+                    
+                    // 開始雷達偵測 (每 15 秒去偷看一次檔案)
+                    let checkCount = 0;
+                    pollingInterval = setInterval(() => {
+                        checkCount++;
+                        statusDiv.innerHTML = `⏳ 伺服器努力工作中... (已偵測 ${checkCount} 次，請耐心等候)`;
+                        fetchData(true); // 帶入 true 表示這是系統自動偵測
+                    }, 15000);
+
+                } else {
+                    const err = await response.json();
+                    statusDiv.innerText = `❌ 啟動失敗：${err.message} (請檢查 Token 是否正確或過期)`;
+                }
+            } catch (e) {
+                statusDiv.innerText = "❌ 網路連線錯誤，無法觸發伺服器。";
             }
         }
     </script>
