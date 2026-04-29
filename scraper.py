@@ -159,16 +159,17 @@ class YahooTaiwanCrawler:
 
 # 測試執行
 if __name__ == "__main__":
-    # 接收 GitHub 傳進來的參數，如果沒有就留白
-    target_date = sys.argv[1] if len(sys.argv) > 1 else ""
+    import os
+    import json
+    import datetime
+
+    # 1. 接收前端傳來的日期字串 (可能是 "2026/04/21,2026/04/22")
+    target_dates_str = sys.argv[1] if len(sys.argv) > 1 else ""
     
-    # 把目標日期傳進爬蟲裡 (我們等一下要修改 Crawler 的寫法)
-    crawler = YahooTaiwanCrawler("2330", target_date)
-    final_data = crawler.run_all()
-    
-    # 存檔邏輯... (如果 target_date 有值，就用 target_date 當 Key，否則用今天)
-    save_key = target_date.replace("/", "-") if target_date else datetime.datetime.now().strftime("%Y-%m-%d")
-    
+    # 2. 如果有逗號，就切成清單；如果沒有，就變成只有一天的清單
+    date_list = target_dates_str.split(",") if target_dates_str else [""]
+
+    # 3. 先讀取歷史檔案
     file_path = "stock_data.json"
     if os.path.exists(file_path):
         with open(file_path, "r", encoding="utf-8") as f:
@@ -176,9 +177,22 @@ if __name__ == "__main__":
             except: history_data = {}
     else:
         history_data = {}
+
+    # 4. 跑迴圈：清單裡有幾天，就抓幾次
+    for t_date in date_list:
+        if t_date:
+            print(f"--- 準備抓取日期: {t_date} ---")
+            
+        crawler = YahooTaiwanCrawler("2330", t_date)
+        final_data = crawler.run_all()
         
-    history_data[save_key] = final_data
-    
+        # 決定存檔的 Key (將 2026/04/24 轉回 2026-04-24)
+        save_key = t_date.replace("/", "-") if t_date else datetime.datetime.now().strftime("%Y-%m-%d")
+        
+        # 把這天的資料寫進大字典裡
+        history_data[save_key] = final_data
+
+    # 5. 迴圈跑完後，一次性把更新後的字典存回檔案
     with open(file_path, "w", encoding="utf-8") as f:
         json.dump(history_data, f, ensure_ascii=False, indent=2)
         
