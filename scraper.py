@@ -7,7 +7,7 @@ import sys # 記得在檔案最上面 import sys
 import datetime
 
 class YahooTaiwanCrawler:
-    def __init__(self, stock_id):
+    def __init__(self, stock_id, target_date=""):
         # Yahoo 奇摩股市的網址一律使用 .TW 結尾（上市櫃皆同）
         self.stock_id = stock_id
         self.base_url = f"https://tw.stock.yahoo.com/quote/{self.stock_id}.TW"
