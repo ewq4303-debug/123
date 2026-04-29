@@ -1,11 +1,16 @@
 name: Daily Taiwan Stock Scraper
 
 on:
-  workflow_dispatch: 
   schedule:
     - cron: '30 8 * * 1-5' 
+  # 允許手動觸發，並增加一個接收「目標日期」的欄位
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: '要抓取的特定日期 (格式: YYYY/MM/DD，留白則抓取最新)'
+        required: false
+        default: ''
 
-# 加入這段，讓機器人有寫入檔案的權限
 permissions:
   contents: write
 
@@ -21,22 +26,21 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-        cache: 'pip'  # 👈 就是加上這神奇的一行！
+        cache: 'pip'
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install requests beautifulsoup4
 
+    # 修改這裡：把接收到的日期變數傳給 Python 執行
     - name: Run the scraper
-      run: python scraper.py
+      run: python scraper.py "${{ github.event.inputs.target_date }}"
 
-    # 關鍵新步驟：把存好的 stock_data.json 傳回 GitHub
     - name: Commit and Push Data
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
         git add stock_data.json
-        # 如果檔案有變動才 commit，避免報錯
         git diff-index --quiet HEAD || git commit -m "Auto-update stock data"
         git push
