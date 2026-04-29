@@ -91,7 +91,6 @@
     </div>
 
     <script>
-        // ✅ 已經為您安全填寫完畢，請勿更動這裡的引號
         const GITHUB_USER = "ewq4303-debug"; 
         const GITHUB_REPO = "123";
         let pollingInterval;
@@ -100,7 +99,6 @@
             if (!val || val === '-') return val;
             let numStr = String(val).replace(/,/g, '');
             let num = parseFloat(numStr);
-            
             if (!isNaN(num)) {
                 if (num > 0) return `<span class="text-red">${val}</span>`;
                 if (num < 0) return `<span class="text-green">${val}</span>`;
@@ -131,10 +129,21 @@
                     return;
                 }
 
+                // 🚀 升級：動態拆解巢狀字典 (打開小箱子)
                 let allKeys = new Set();
                 availableDates.forEach(d => {
-                    Object.keys(data[d]).forEach(k => {
-                        if(k !== '資料日期' && k !== 'Error') allKeys.add(k);
+                    const dailyData = data[d];
+                    Object.keys(dailyData).forEach(mainKey => {
+                        if (mainKey === 'Stock ID' || mainKey === 'Error' || mainKey === '資料日期') return;
+                        
+                        // 如果這個項目裡面還包著物件，就把裡面的 key 抓出來
+                        if (typeof dailyData[mainKey] === 'object' && dailyData[mainKey] !== null) {
+                            Object.keys(dailyData[mainKey]).forEach(subKey => {
+                                if (subKey !== '資料日期') allKeys.add(subKey);
+                            });
+                        } else {
+                            allKeys.add(mainKey);
+                        }
                     });
                 });
                 const columns = Array.from(allKeys);
@@ -145,9 +154,20 @@
 
                 availableDates.forEach(date => {
                     html += `<tr><td>${date}</td>`;
-                    const rowData = data[date];
+                    const dailyData = data[date];
+                    
+                    // 🚀 升級：攤平這天的所有資料，方便放入表格
+                    let flatData = {};
+                    Object.keys(dailyData).forEach(k => {
+                        if (typeof dailyData[k] === 'object' && dailyData[k] !== null) {
+                            Object.assign(flatData, dailyData[k]); // 把小箱子裡的東西倒進大箱子
+                        } else {
+                            flatData[k] = dailyData[k];
+                        }
+                    });
+
                     columns.forEach(col => {
-                        let val = rowData[col] !== undefined ? rowData[col] : '-';
+                        let val = flatData[col] !== undefined ? flatData[col] : '-';
                         html += `<td>${formatNumberColor(val)}</td>`;
                     });
                     html += `</tr>`;
