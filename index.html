@@ -37,40 +37,53 @@
         
         let pollingInterval;
 
-        async function fetchData(isPolling = false) {
-            const selectedDate = document.getElementById('datePicker').value;
-            const resultDiv = document.getElementById('result');
+        async function triggerBackend() {
+            const token = document.getElementById('githubToken').value;
+            // 🚨 漏掉的就是這行：抓出日曆選擇的日期
+            const rawDate = document.getElementById('datePicker').value; 
             const statusDiv = document.getElementById('statusMessage');
             const panel = document.getElementById('backendPanel');
             
-            if (!selectedDate) { statusDiv.innerText = "請先選擇日期！"; return; }
+            if (!token) { alert("請輸入 Token！"); return; }
 
+            // 🚨 以及這行：將 2026-04-22 轉換成 2026/04/22
+            const formattedDate = rawDate.replace(/-/g, '/');
+            
+            statusDiv.innerText = `🔄 正在向 GitHub 發送爬蟲指令，要求抓取 ${formattedDate} 的資料...`;
+            
             try {
-                // 加入時間戳記避免瀏覽器讀取到舊的暫存檔
-                const noCacheUrl = `stock_data.json?t=${new Date().getTime()}`;
-                const response = await fetch(noCacheUrl);
-                const data = await response.json();
-                
-                if (data[selectedDate]) {
-                    // 如果找到資料
-                    statusDiv.innerText = "✅ 查詢成功！";
-                    resultDiv.innerHTML = JSON.stringify(data[selectedDate], null, 2);
+                // 呼叫 GitHub API 觸發 main.yml
+                const response = await fetch(`https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/actions/workflows/main.yml/dispatches`, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/vnd.github.v3+json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ 
+                        ref: 'main',
+                        inputs: { target_date: formattedDate } // 這裡現在認得 formattedDate 了！
+                    })
+                });
+
+                if (response.ok) {
                     panel.style.display = "none"; // 隱藏面板
+                    statusDiv.innerHTML = "🚀 <strong>爬蟲伺服器已成功啟動！</strong><br>伺服器正在開機 ➔ 下載套件 ➔ 爬取 Yahoo ➔ 寫入資料庫...<br>預計需要 3 到 5 分鐘，網頁將自動為您偵測最新狀態，請勿關閉網頁。";
                     
-                    if (isPolling) {
-                        clearInterval(pollingInterval);
-                        statusDiv.innerText = "🎉 爬蟲執行完畢！新資料已自動載入。";
-                    }
+                    // 開始雷達偵測 (每 15 秒去偷看一次檔案)
+                    let checkCount = 0;
+                    pollingInterval = setInterval(() => {
+                        checkCount++;
+                        statusDiv.innerHTML = `⏳ 伺服器努力工作中... (已偵測 ${checkCount} 次，請耐心等候)`;
+                        fetchData(true); // 帶入 true 表示這是系統自動偵測
+                    }, 15000);
+
                 } else {
-                    // 如果找不到資料
-                    if (!isPolling) {
-                        statusDiv.innerText = `❌ 本機查無 ${selectedDate} 的資料。`;
-                        resultDiv.innerHTML = `目前系統擁有的日期：${Object.keys(data).join(", ") || '無'}`;
-                        panel.style.display = "block"; // 顯示呼叫爬蟲的面板
-                    }
+                    const err = await response.json();
+                    statusDiv.innerText = `❌ 啟動失敗：${err.message} (請檢查 Token 是否正確或過期)`;
                 }
-            } catch (error) {
-                statusDiv.innerText = "資料庫讀取失敗。";
+            } catch (e) {
+                console.error("🚨 抓到的真實錯誤是：", e);
+                statusDiv.innerText = "❌ 網路連線錯誤：" + e.name + " - " + e.message;
             }
         }
 
