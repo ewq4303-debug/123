@@ -114,7 +114,11 @@
                     statusDiv.innerText = `❌ 啟動失敗：${err.message} (請檢查 Token 是否正確或過期)`;
                 }
             } catch (e) {
-                statusDiv.innerText = "❌ 網路連線錯誤，無法觸發伺服器。";
+                // 1. 把真正的錯誤印在 F12 Console 裡
+                console.error("🚨 抓到的真實錯誤是：", e);
+                
+                // 2. 把真實的錯誤訊息直接顯示在網頁畫面上
+                statusDiv.innerText = "❌ 網路連線錯誤：" + e.name + " - " + e.message;
             }
         }
     </script>
