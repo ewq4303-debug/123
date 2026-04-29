@@ -91,7 +91,10 @@
                         'Accept': 'application/vnd.github.v3+json',
                         'Authorization': `Bearer ${token}`
                     },
-                    body: JSON.stringify({ ref: 'main' })
+                    body: JSON.stringify({ 
+                        ref: 'main',
+                        inputs: { target_date: formattedDate }
+                    })
                 });
 
                 if (response.ok) {
