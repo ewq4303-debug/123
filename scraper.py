@@ -78,41 +78,49 @@ def get_margin_trading(self):
         print(f"Fetching Margin & SBL Data for {self.stock_id}... Target Date: {self.target_date}")
         data = {}
         
-        # 既然網址沒變，代表兩個表格都在同一個頁面裡，我們只要抓一次！
-        soup = self.fetch_html("margin")
-        
-        if soup:
+        # ==========================================
+        # 第一趟：專心抓「資券餘額」(margin)
+        # ==========================================
+        soup_margin = self.fetch_html("margin")
+        if soup_margin:
             try:
-                # 抓出網頁裡所有的資料列 (這會同時包含兩個表格的所有資料)
-                rows = soup.find_all('li', class_='List(n)')
-                
+                rows = soup_margin.find_all('li', class_='List(n)')
                 for row in rows:
                     cols = list(row.stripped_strings)
-                    
-                    # 確保這是一行有效的日期資料 (至少要有 6 個欄位，且第一個欄位是日期)
-                    if len(cols) >= 6 and '/' in cols[0]:
+                    if len(cols) >= 8 and '/' in cols[0]:
                         row_date = cols[0]
-                        
-                        # 如果不是我們要找的日期，就跳過
                         if self.target_date and row_date != self.target_date:
                             continue 
                             
-                        # 情況 A：這是「資券餘額」的表格 (有 8 個欄位)
-                        if len(cols) >= 8:
-                            data["資料日期"] = row_date
-                            data["融資增減"] = cols[1]
-                            data["融資使用率"] = cols[3]
-                            data["融券增減"] = cols[4]
-                            data["融券餘額"] = cols[5]
-                            data["券資比"] = cols[7]
-                            
-                        # 情況 B：這是「借券賣出餘額」的表格 (只有 6 個欄位)
-                        elif len(cols) == 6 or len(cols) == 7:
-                            data["借券賣出增減"] = cols[4]
-                            data["借券賣出餘額"] = cols[5]
-
+                        data["資料日期"] = row_date
+                        data["融資增減"] = cols[1]
+                        data["融資使用率"] = cols[3]
+                        data["融券增減"] = cols[4]
+                        data["融券餘額"] = cols[5]
+                        data["券資比"] = cols[7]
+                        break
             except Exception as e:
-                print(f"資券與借券資料解析失敗: {str(e)}")
+                print(f"資券餘額解析失敗: {str(e)}")
+
+        # ==========================================
+        # 第二趟：強制走後門抓「借券賣出」(short-selling)
+        # ==========================================
+        soup_sbl = self.fetch_html("short-selling") 
+        if soup_sbl:
+            try:
+                rows = soup_sbl.find_all('li', class_='List(n)')
+                for row in rows:
+                    cols = list(row.stripped_strings)
+                    if len(cols) >= 6 and '/' in cols[0]:
+                        row_date = cols[0]
+                        if self.target_date and row_date != self.target_date:
+                            continue 
+                            
+                        data["借券賣出增減"] = cols[4]
+                        data["借券賣出餘額"] = cols[5]
+                        break
+            except Exception as e:
+                print(f"借券賣出解析失敗: {str(e)}")
 
         return data if data else None
 
