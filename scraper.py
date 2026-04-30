@@ -74,7 +74,7 @@ class YahooTaiwanCrawler:
         except Exception as e:
             return {"Error": f"解析失敗: {str(e)}"}
 
-def get_margin_trading(self):
+    def get_margin_trading(self):
         print(f"Fetching Margin & SBL Data for {self.stock_id}... Target Date: {self.target_date}")
         data = {}
         
