@@ -78,86 +78,69 @@ class YahooTaiwanCrawler:
         print(f"Fetching Margin & SBL Data for {self.stock_id}... Target Date: {self.target_date}")
         data = {}
         
-        # 抓取 Yahoo 網頁原始碼
-        soup = self.fetch_html("margin")
-        if not soup: return None
+        # ==========================================
+        # 步驟一：從 Yahoo 抓取「資券餘額」
+        # ==========================================
+        soup_margin = self.fetch_html("margin")
+        if soup_margin:
+            try:
+                rows = soup_margin.find_all('li', class_='List(n)')
+                for row in rows:
+                    cols = list(row.stripped_strings)
+                    if len(cols) >= 8 and '/' in cols[0]:
+                        row_date = cols[0]
+                        if self.target_date and row_date != self.target_date:
+                            continue 
+                            
+                        data["資料日期"] = row_date
+                        data["融資增減"] = cols[1]
+                        data["融資使用率"] = cols[3]
+                        data["融券增減"] = cols[4]
+                        data["融券餘額"] = cols[5]
+                        data["券資比"] = cols[7]
+                        break
+            except Exception as e:
+                print(f"資券餘額解析失敗: {str(e)}")
 
         # ==========================================
-        # 1. 抓取原本的資券表格 (肉眼可見的 HTML)
-        # ==========================================
-        try:
-            rows = soup.find_all('li', class_='List(n)')
-            for row in rows:
-                cols = list(row.stripped_strings)
-                if len(cols) >= 8 and '/' in cols[0]:
-                    row_date = cols[0]
-                    if self.target_date and row_date != self.target_date:
-                        continue 
-                        
-                    data["資料日期"] = row_date
-                    data["融資增減"] = cols[1]
-                    data["融資使用率"] = cols[3]
-                    data["融券增減"] = cols[4]
-                    data["融券餘額"] = cols[5]
-                    data["券資比"] = cols[7]
-                    break
-        except Exception as e:
-            print(f"資券解析失敗: {str(e)}")
-
-        # ==========================================
-        # 2. 終極破解：挖掘隱藏在 __NEXT_DATA__ 裡的借券資料
+        # 步驟二：從 台灣證交所 (TWSE) 抓取「借券賣出」
         # ==========================================
         if self.target_date:
+            import requests
+            import time
+            
+            # 將 2026/04/29 轉為 20260429
+            twse_date = self.target_date.replace("/", "")
+            # 證交所 TWT93U 報表 (融券及借券賣出餘額)
+            twse_url = f"https://www.twse.com.tw/exchangeReport/TWT93U?response=json&date={twse_date}"
+            
             try:
-                import json
-                # 找到網頁中隱藏資料的保險箱
-                script = soup.find("script", id="__NEXT_DATA__")
-                if script and script.string:
-                    json_data = json.loads(script.string)
-                    # Yahoo 的 JSON 日期格式通常是 "2026-04-29"
-                    target_d1 = self.target_date.replace("/", "-") 
-                    target_d2 = self.target_date
-
-                    # 建立一個內部探測器，遞迴深入 JSON 迷宮尋找當天資料
-                    def extract_sbl(node):
-                        if isinstance(node, dict):
-                            node_date = node.get("date") or node.get("Date")
-                            # 如果找到我們的目標日期
-                            if node_date in [target_d1, target_d2]:
-                                # 檢查這層有沒有借券 (sbl 或 borrow) 的相關欄位
-                                sbl_keys = [k for k in node.keys() if 'sbl' in k.lower() or 'borrow' in k.lower()]
-                                if sbl_keys: return node
+                # 🛡️ 加上 3 秒暫停，避免連續抓取 20 天被證交所封鎖 IP
+                time.sleep(3) 
+                
+                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+                res = requests.get(twse_url, headers=headers)
+                twse_json = res.json()
+                
+                if twse_json.get('stat') == 'OK' and 'data' in twse_json:
+                    # 🚀 關鍵修復：在全市場名單中尋找 2330
+                    for row in twse_json['data']:
+                        # row[0] 是股票代號
+                        if row[0] == self.stock_id:
+                            # 找到 2330 了！開始擷取數據
+                            # 欄位對應: [6]借券賣出, [7]借券還券, [8]借券餘額
+                            sbl_sell = int(row[6].replace(',', ''))
+                            sbl_return = int(row[7].replace(',', ''))
+                            sbl_balance = row[8]
                             
-                            # 繼續往下層找
-                            for v in node.values():
-                                res = extract_sbl(v)
-                                if res: return res
-                        elif isinstance(node, list):
-                            for item in node:
-                                res = extract_sbl(item)
-                                if res: return res
-                        return None
-
-                    # 啟動探測器
-                    day_data = extract_sbl(json_data)
-
-                    # 如果成功挖到那天的隱藏字典
-                    if day_data:
-                        for k, v in day_data.items():
-                            if v is None: continue
-                            k_lower = k.lower()
+                            sbl_change = sbl_sell - sbl_return
+                            data["借券賣出增減"] = f"{sbl_change:,}"
+                            data["借券賣出餘額"] = sbl_balance
                             
-                            # 動態辨識哪個欄位是增減、哪個是餘額
-                            if 'sbl' in k_lower or 'borrow' in k_lower:
-                                # 格式化數字 (加上千分位逗號)
-                                val_str = f"{int(v):,}" if isinstance(v, (int, float)) else str(v)
-                                
-                                if 'balance' in k_lower or 'remain' in k_lower:
-                                    data["借券賣出餘額"] = val_str
-                                elif 'change' in k_lower or 'diff' in k_lower or 'net' in k_lower:
-                                    data["借券賣出增減"] = val_str
+                            print(f"✅ 成功從證交所取得 {twse_date} 借券資料！")
+                            break
             except Exception as e:
-                print(f"隱藏 JSON 解析失敗: {str(e)}")
+                print(f"證交所借券資料取得失敗: {str(e)}")
 
         return data if data else None
 
