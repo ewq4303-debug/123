@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>台股 2330 籌碼儀表板 (自動補齊版)</title>
+    <title>台股 2330 籌碼儀表板</title>
     <style>
         :root { --primary: #2563eb; --bg: #f1f5f9; --card: #ffffff; --text: #334155; --border: #e2e8f0; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg); color: var(--text); padding: 20px; max-width: 1200px; margin: 0 auto; }
@@ -25,35 +25,25 @@
         tr:hover { background: #f1f5f9; }
         .text-red { color: #dc2626; font-weight: bold; }
         .text-green { color: #16a34a; font-weight: bold; }
-        #statusMessage { margin-top: 15px; padding: 10px; border-radius: 5px; font-weight: bold; }
-        .alert-warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
-        .alert-info { background-color: #cce5ff; color: #004085; border: 1px solid #b8daff; }
-        .alert-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        #tableStatus { margin-top: 10px; font-weight: bold; }
     </style>
 </head>
 <body>
     <h1>📈 台股 2330 籌碼數據儀表板</h1>
     
     <div class="card">
-        <h2 class="card-title">🔍 區間查詢與自動補齊</h2>
+        <h2 class="card-title">🔍 歷史區間查詢</h2>
         <div class="form-group"><label>開始日期：</label><input type="date" id="startDate"></div>
         <div class="form-group"><label>結束日期：</label><input type="date" id="endDate"></div>
-        <div class="form-group"><label>GitHub Token (選填)：</label><input type="password" id="githubToken" placeholder="若需自動補齊請輸入"></div>
+        <button onclick="fetchRangeData()">載入表格資料</button>
         
-        <button onclick="fetchAndAutoFill()">查詢並分析資料</button>
-        
-        <div id="statusMessage" style="display: none;"></div>
-        
+        <div id="tableStatus"></div>
         <div class="table-container" id="tableContainer">
-            <p style="color: #94a3b8; text-align: center; margin-top: 20px;">請選擇區間並點擊查詢，系統將自動比對並顯示資料。</p>
+            <p style="color: #94a3b8; text-align: center; margin-top: 20px;">請選擇區間並點擊載入，表格將顯示於此。</p>
         </div>
     </div>
 
     <script>
-        const GITHUB_USER = "ewq4303-debug"; 
-        const GITHUB_REPO = "123";
-        let pollingInterval;
-
         function formatNumberColor(val) {
             if (!val || val === '-') return val;
             let num = parseFloat(String(val).replace(/,/g, ''));
@@ -64,159 +54,69 @@
             return val;
         }
 
-        // 計算區間內缺少的「營業日」(排除六日)
-        function getMissingBusinessDays(startStr, endStr, existingDates) {
-            let missing = [];
-            let [sY, sM, sD] = startStr.split('-');
-            let [eY, eM, eD] = endStr.split('-');
-            let curr = new Date(sY, sM - 1, sD);
-            let endD = new Date(eY, eM - 1, eD);
-
-            while (curr <= endD) {
-                let dayOfWeek = curr.getDay(); // 0 是週日, 6 是週六
-                if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-                    let yyyy = curr.getFullYear();
-                    let mm = String(curr.getMonth() + 1).padStart(2, '0');
-                    let dd = String(curr.getDate()).padStart(2, '0');
-                    let dateStr = `${yyyy}-${mm}-${dd}`;
-                    if (!existingDates.includes(dateStr)) {
-                        missing.push(dateStr);
-                    }
-                }
-                curr.setDate(curr.getDate() + 1);
-            }
-            return missing;
-        }
-
-        function renderTable(data, availableDates) {
-            const container = document.getElementById('tableContainer');
-            if (availableDates.length === 0) {
-                container.innerHTML = ""; return;
-            }
-
-            let allKeys = new Set();
-            availableDates.forEach(d => {
-                const dailyData = data[d];
-                Object.keys(dailyData).forEach(mainKey => {
-                    if (mainKey === 'Stock ID' || mainKey === 'Error' || mainKey === '資料日期') return;
-                    if (typeof dailyData[mainKey] === 'object' && dailyData[mainKey] !== null) {
-                        Object.keys(dailyData[mainKey]).forEach(subKey => {
-                            if (subKey !== '資料日期') allKeys.add(subKey);
-                        });
-                    } else {
-                        allKeys.add(mainKey);
-                    }
-                });
-            });
-            const columns = Array.from(allKeys);
-
-            let html = `<table><thead><tr><th>日期</th>`;
-            columns.forEach(col => html += `<th>${col}</th>`);
-            html += `</tr></thead><tbody>`;
-
-            availableDates.forEach(date => {
-                html += `<tr><td>${date}</td>`;
-                const dailyData = data[date];
-                let flatData = {};
-                Object.keys(dailyData).forEach(k => {
-                    if (typeof dailyData[k] === 'object' && dailyData[k] !== null) Object.assign(flatData, dailyData[k]);
-                    else flatData[k] = dailyData[k];
-                });
-                columns.forEach(col => {
-                    let val = flatData[col] !== undefined ? flatData[col] : '-';
-                    html += `<td>${formatNumberColor(val)}</td>`;
-                });
-                html += `</tr>`;
-            });
-            html += `</tbody></table>`;
-            container.innerHTML = html;
-        }
-
-        async function fetchAndAutoFill() {
+        async function fetchRangeData() {
             const start = document.getElementById('startDate').value;
             const end = document.getElementById('endDate').value;
-            const token = document.getElementById('githubToken').value;
-            const statusDiv = document.getElementById('statusMessage');
+            const container = document.getElementById('tableContainer');
+            const statusDiv = document.getElementById('tableStatus');
             
-            if (!start || !end || start > end) { 
-                alert("請選擇正確的日期區間！"); return; 
-            }
+            if (!start || !end) { statusDiv.innerHTML = "<span style='color:red;'>請選擇完整的開始與結束日期！</span>"; return; }
+            if (start > end) { statusDiv.innerHTML = "<span style='color:red;'>開始日期不能大於結束日期！</span>"; return; }
 
-            statusDiv.style.display = "block";
-            statusDiv.className = "alert-info";
-            statusDiv.innerHTML = "🔄 正在讀取資料庫...";
-
+            statusDiv.innerHTML = "資料載入中...";
+            
             try {
-                // 1. 讀取現有資料並畫出表格
                 const response = await fetch(`stock_data.json?t=${new Date().getTime()}`);
                 const data = await response.json();
-                const existingDates = Object.keys(data);
                 
-                let availableDatesInRange = existingDates.filter(d => d >= start && d <= end).sort().reverse();
-                renderTable(data, availableDatesInRange);
-
-                // 2. 計算缺少的營業日
-                const missingDates = getMissingBusinessDays(start, end, existingDates);
-
-                if (missingDates.length === 0) {
-                    statusDiv.className = "alert-success";
-                    statusDiv.innerHTML = `✅ 資料齊全！區間內所有營業日皆已載入。`;
-                    clearInterval(pollingInterval);
+                let availableDates = Object.keys(data).filter(d => d >= start && d <= end).sort().reverse();
+                
+                if (availableDates.length === 0) {
+                    statusDiv.innerHTML = `<span style='color:red;'>這個區間內沒有任何資料。(系統每日自動爬蟲，若有缺漏將於今日下午自動補齊)</span>`;
+                    container.innerHTML = "";
                     return;
                 }
 
-                // 3. 處理缺漏邏輯
-                if (!token) {
-                    statusDiv.className = "alert-warning";
-                    statusDiv.innerHTML = `⚠️ 發現 <strong>${missingDates.length}</strong> 天營業日缺少資料 (${missingDates[0]} 等)。<br>若要自動補齊，請輸入 GitHub Token 後再次點擊查詢。`;
-                } else {
-                    // 把 2026-04-21 轉成 2026/04/21 並用逗號串起來
-                    const formatForPython = missingDates.map(d => d.replace(/-/g, '/')).join(',');
-                    
-                    statusDiv.innerHTML = `🚀 偵測到 ${missingDates.length} 天缺漏資料，正在呼叫爬蟲伺服器批次抓取...<br>(預計需等待 3-5 分鐘，請勿關閉網頁)`;
-                    
-                    // 呼叫 GitHub API
-                    const apiRes = await fetch(`https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/actions/workflows/main.yml/dispatches`, {
-                        method: 'POST',
-                        headers: { 'Accept': 'application/vnd.github.v3+json', 'Authorization': `Bearer ${token}` },
-                        body: JSON.stringify({ ref: 'main', inputs: { target_date: formatForPython } })
+                let allKeys = new Set();
+                availableDates.forEach(d => {
+                    Object.keys(data[d]).forEach(mainKey => {
+                        if (mainKey === 'Stock ID' || mainKey === 'Error' || mainKey === '資料日期') return;
+                        if (typeof data[d][mainKey] === 'object' && data[d][mainKey] !== null) {
+                            Object.keys(data[d][mainKey]).forEach(subKey => {
+                                if (subKey !== '資料日期') allKeys.add(subKey);
+                            });
+                        } else {
+                            allKeys.add(mainKey);
+                        }
                     });
+                });
+                const columns = Array.from(allKeys);
 
-                    if (apiRes.ok) {
-                        let checkCount = 0;
-                        clearInterval(pollingInterval); // 清除舊的計時器
-                        pollingInterval = setInterval(() => {
-                            checkCount++;
-                            statusDiv.innerHTML = `⏳ 伺服器努力爬取 ${missingDates.length} 天資料中... (已偵測 ${checkCount} 次)<br>請耐心等候，資料庫更新後表格將自動重整。`;
-                            
-                            // 偷偷在背景重新執行檢查，若資料齊全就會觸發上面的 success 停止計時
-                            // 但為了不干擾畫面，我們另外寫一個靜默抓取
-                            checkDatabaseSilently(start, end);
-                        }, 15000);
-                    } else {
-                        statusDiv.className = "alert-warning";
-                        statusDiv.innerHTML = `❌ 爬蟲啟動失敗，請檢查 Token 權限。`;
-                    }
-                }
-            } catch (error) {
-                statusDiv.className = "alert-warning";
-                statusDiv.innerHTML = "❌ 讀取資料庫失敗，可能是檔案尚未建立。";
-            }
-        }
+                let html = `<table><thead><tr><th>日期</th>`;
+                columns.forEach(col => html += `<th>${col}</th>`);
+                html += `</tr></thead><tbody>`;
 
-        // 背景靜默檢查資料庫是否更新
-        async function checkDatabaseSilently(start, end) {
-            try {
-                const response = await fetch(`stock_data.json?t=${new Date().getTime()}`);
-                const data = await response.json();
-                const existingDates = Object.keys(data);
-                const missingDates = getMissingBusinessDays(start, end, existingDates);
+                availableDates.forEach(date => {
+                    html += `<tr><td>${date}</td>`;
+                    let flatData = {};
+                    Object.keys(data[date]).forEach(k => {
+                        if (typeof data[date][k] === 'object' && data[date][k] !== null) Object.assign(flatData, data[date][k]);
+                        else flatData[k] = data[date][k];
+                    });
+                    columns.forEach(col => {
+                        let val = flatData[col] !== undefined ? flatData[col] : '-';
+                        html += `<td>${formatNumberColor(val)}</td>`;
+                    });
+                    html += `</tr>`;
+                });
+                html += `</tbody></table>`;
                 
-                if (missingDates.length === 0) {
-                    // 如果沒缺資料了，就重新執行主函數來畫表格並顯示成功訊息
-                    fetchAndAutoFill(); 
-                }
-            } catch (e) {}
+                container.innerHTML = html;
+                statusDiv.innerHTML = `<span style='color:green;'>✅ 成功載入 ${availableDates.length} 筆資料！</span>`;
+                
+            } catch (error) {
+                statusDiv.innerHTML = "<span style='color:red;'>讀取資料庫失敗。</span>";
+            }
         }
     </script>
 </body>
