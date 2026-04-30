@@ -163,13 +163,7 @@ if __name__ == "__main__":
     import json
     import datetime
 
-    # 1. 接收前端傳來的日期字串 (可能是 "2026/04/21,2026/04/22")
-    target_dates_str = sys.argv[1] if len(sys.argv) > 1 else ""
-    
-    # 2. 如果有逗號，就切成清單；如果沒有，就變成只有一天的清單
-    date_list = target_dates_str.split(",") if target_dates_str else [""]
-
-    # 3. 先讀取歷史檔案
+    # 1. 讀取現有資料庫
     file_path = "stock_data.json"
     if os.path.exists(file_path):
         with open(file_path, "r", encoding="utf-8") as f:
@@ -178,22 +172,43 @@ if __name__ == "__main__":
     else:
         history_data = {}
 
-    # 4. 跑迴圈：清單裡有幾天，就抓幾次
-    for t_date in date_list:
-        if t_date:
-            print(f"--- 準備抓取日期: {t_date} ---")
-            
-        crawler = YahooTaiwanCrawler("2330", t_date)
-        final_data = crawler.run_all()
-        
-        # 決定存檔的 Key (將 2026/04/24 轉回 2026-04-24)
-        save_key = t_date.replace("/", "-") if t_date else datetime.datetime.now().strftime("%Y-%m-%d")
-        
-        # 把這天的資料寫進大字典裡
-        history_data[save_key] = final_data
+    # 2. 自動偵測缺漏日期 (往回推算 7 天內的營業日)
+    dates_to_fetch = []
+    today = datetime.datetime.now()
+    
+    print("🔍 開始檢查過去 7 天的資料完整性...")
+    for i in range(7):
+        target_day = today - datetime.timedelta(days=i)
+        # 排除週六 (5) 與週日 (6)
+        if target_day.weekday() < 5:
+            check_key = target_day.strftime("%Y-%m-%d")
+            # 如果資料庫裡沒有這一天，就加入待抓取清單
+            if check_key not in history_data:
+                dates_to_fetch.append(target_day.strftime("%Y/%m/%d"))
 
-    # 5. 迴圈跑完後，一次性把更新後的字典存回檔案
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(history_data, f, ensure_ascii=False, indent=2)
-        
-    print(f"資料已成功儲存至 {file_path}")
+    # 如果有從外部傳入特定日期 (手動除錯用)，也加進去
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1]:
+        dates_to_fetch.extend(sys.argv[1].split(","))
+
+    # 去除重複的日期
+    dates_to_fetch = list(set(dates_to_fetch))
+
+    # 3. 開始執行抓取
+    if not dates_to_fetch:
+        print("✅ 過去 7 天營業日資料皆已齊全，無須補抓。")
+    else:
+        print(f"🚀 發現缺漏，準備抓取以下日期: {dates_to_fetch}")
+        for t_date in dates_to_fetch:
+            print(f"\n--- 正在抓取: {t_date} ---")
+            crawler = YahooTaiwanCrawler("2330", t_date)
+            final_data = crawler.run_all()
+            
+            save_key = t_date.replace("/", "-")
+            history_data[save_key] = final_data
+
+        # 4. 存檔寫回 JSON
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(history_data, f, ensure_ascii=False, indent=2)
+            
+        print(f"\n💾 資料已成功儲存至 {file_path}")
