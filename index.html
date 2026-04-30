@@ -26,6 +26,10 @@
         .text-red { color: #dc2626; font-weight: bold; }
         .text-green { color: #16a34a; font-weight: bold; }
         #tableStatus { margin-top: 10px; font-weight: bold; }
+        
+        /* 累計列的專屬樣式 */
+        .total-row { background-color: #e2e8f0 !important; font-weight: bold; border-top: 2px solid #cbd5e1; }
+        .total-row td:first-child { color: #1e293b; }
     </style>
 </head>
 <body>
@@ -66,10 +70,12 @@
             statusDiv.innerHTML = "資料載入中...";
             
             try {
+                // 加上時間戳記避免快取
                 const response = await fetch(`stock_data.json?t=${new Date().getTime()}`);
                 const data = await response.json();
                 
-                let availableDates = Object.keys(data).filter(d => d >= start && d <= end).sort().reverse();
+                // 🚀 修改 1：拿掉 .reverse()，讓日期由舊到新 (小到大) 排列
+                let availableDates = Object.keys(data).filter(d => d >= start && d <= end).sort();
                 
                 if (availableDates.length === 0) {
                     statusDiv.innerHTML = `<span style='color:red;'>這個區間內沒有任何資料。(系統每日自動爬蟲，若有缺漏將於今日下午自動補齊)</span>`;
@@ -80,10 +86,11 @@
                 let allKeys = new Set();
                 availableDates.forEach(d => {
                     Object.keys(data[d]).forEach(mainKey => {
-                        if (mainKey === 'Stock ID' || mainKey === 'Error' || mainKey === '資料日期') return;
+                        // 🚀 修改 2：把 '交易日期' 也加入排除黑名單
+                        if (mainKey === 'Stock ID' || mainKey === 'Error' || mainKey === '資料日期' || mainKey === '交易日期') return;
                         if (typeof data[d][mainKey] === 'object' && data[d][mainKey] !== null) {
                             Object.keys(data[d][mainKey]).forEach(subKey => {
-                                if (subKey !== '資料日期') allKeys.add(subKey);
+                                if (subKey !== '資料日期' && subKey !== '交易日期') allKeys.add(subKey);
                             });
                         } else {
                             allKeys.add(mainKey);
@@ -92,6 +99,12 @@
                 });
                 const columns = Array.from(allKeys);
 
+                // 🚀 準備計算機：為每個欄位建立一個加總變數
+                let totals = {};
+                columns.forEach(col => {
+                    totals[col] = { sum: 0, isSummable: true };
+                });
+
                 let html = `<table><thead><tr><th>日期</th>`;
                 columns.forEach(col => html += `<th>${col}</th>`);
                 html += `</tr></thead><tbody>`;
@@ -99,16 +112,47 @@
                 availableDates.forEach(date => {
                     html += `<tr><td>${date}</td>`;
                     let flatData = {};
+                    
+                    // 攤平資料
                     Object.keys(data[date]).forEach(k => {
                         if (typeof data[date][k] === 'object' && data[date][k] !== null) Object.assign(flatData, data[date][k]);
                         else flatData[k] = data[date][k];
                     });
+                    
                     columns.forEach(col => {
-                        let val = flatData[col] !== undefined ? flatData[col] : '-';
-                        html += `<td>${formatNumberColor(val)}</td>`;
+                        let rawVal = flatData[col] !== undefined ? flatData[col] : '-';
+                        html += `<td>${formatNumberColor(rawVal)}</td>`;
+                        
+                        // 🚀 累計邏輯：判斷這個欄位能不能加總
+                        let strVal = String(rawVal).trim();
+                        if (strVal === '-' || strVal.includes('%')) {
+                            // 含有百分比或無資料的欄位，標記為不可加總
+                            totals[col].isSummable = false;
+                        } else {
+                            let num = parseFloat(strVal.replace(/,/g, ''));
+                            if (!isNaN(num)) {
+                                totals[col].sum += num;
+                            } else {
+                                totals[col].isSummable = false;
+                            }
+                        }
                     });
                     html += `</tr>`;
                 });
+
+                // 🚀 修改 3：在最下方畫出「累計」列
+                html += `<tr class="total-row"><td>累計</td>`;
+                columns.forEach(col => {
+                    if (totals[col].isSummable) {
+                        // 將數字加上千分位逗號，並套用紅綠色
+                        let formattedSum = totals[col].sum.toLocaleString('en-US');
+                        html += `<td>${formatNumberColor(formattedSum)}</td>`;
+                    } else {
+                        html += `<td>-</td>`;
+                    }
+                });
+                html += `</tr>`;
+
                 html += `</tbody></table>`;
                 
                 container.innerHTML = html;
