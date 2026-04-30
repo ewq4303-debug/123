@@ -3,49 +3,108 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>台股 2330 籌碼儀表板</title>
+    <title>台股 2330 專業籌碼儀表板</title>
     <style>
-        :root { --primary: #2563eb; --bg: #f1f5f9; --card: #ffffff; --text: #334155; --border: #e2e8f0; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg); color: var(--text); padding: 20px; max-width: 1200px; margin: 0 auto; }
-        h1 { text-align: center; color: #1e293b; }
-        .card { background: var(--card); padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 20px; }
-        .card-title { margin-top: 0; font-size: 1.2rem; border-bottom: 2px solid var(--bg); padding-bottom: 10px; }
-        .form-group { display: inline-block; margin-right: 15px; margin-bottom: 10px; }
-        label { font-weight: bold; margin-right: 5px; font-size: 0.9rem;}
-        input { padding: 8px; border: 1px solid var(--border); border-radius: 5px; outline: none; }
-        input:focus { border-color: var(--primary); }
-        button { background: var(--primary); color: white; border: none; padding: 9px 18px; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.2s; }
-        button:hover { background: #1d4ed8; }
-        .table-container { overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; white-space: nowrap; }
-        th, td { border: 1px solid var(--border); padding: 12px; text-align: right; }
-        th { background: #f8fafc; color: #475569; text-align: center; font-weight: 600; }
-        td:first-child { text-align: center; font-weight: bold; } 
-        tr:nth-child(even) { background: #f8fafc; }
-        tr:hover { background: #f1f5f9; }
-        .text-red { color: #dc2626; font-weight: bold; }
-        .text-green { color: #16a34a; font-weight: bold; }
-        #tableStatus { margin-top: 10px; font-weight: bold; }
-        .total-row { background-color: #e2e8f0 !important; font-weight: bold; border-top: 2px solid #cbd5e1; }
-        .total-row td:first-child { color: #1e293b; }
+        /* --- 基礎變數與重置 --- */
+        :root {
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --red: #dc2626;
+            --green: #16a34a;
+        }
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg); color: var(--text-main); margin: 0; padding: 20px; }
+        
+        /* --- 頂部標題與佈局 --- */
+        .dashboard-container { max-width: 1400px; margin: 0 auto; }
+        .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; border-bottom: 2px solid var(--border); padding-bottom: 15px; }
+        .header h1 { margin: 0; font-size: 1.8rem; color: #1e293b; display: flex; align-items: center; gap: 10px; }
+        
+        /* --- 控制列 (Control Bar) --- */
+        .control-bar { background: var(--surface); padding: 15px 25px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; align-items: center; flex-wrap: wrap; gap: 20px; margin-bottom: 20px; }
+        .form-group { display: flex; align-items: center; gap: 10px; }
+        label { font-weight: 600; color: var(--text-muted); font-size: 0.95rem;}
+        input[type="date"] { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; outline: none; font-family: inherit; color: var(--text-main); }
+        input[type="date"]:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+        button { background: var(--primary); color: white; border: none; padding: 10px 24px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: all 0.2s; box-shadow: 0 2px 4px rgba(37,99,235,0.2); }
+        button:hover { background: var(--primary-hover); transform: translateY(-1px); }
+        button:active { transform: translateY(0); }
+        
+        /* --- 總覽卡片 (KPI Cards) --- */
+        .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 25px; display: none; /* 預設隱藏，有資料才顯示 */ }
+        .kpi-card { background: var(--surface); padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border-left: 5px solid var(--primary); display: flex; flex-direction: column; gap: 8px; }
+        .kpi-title { font-size: 0.9rem; color: var(--text-muted); font-weight: 600; }
+        .kpi-value { font-size: 1.8rem; font-weight: bold; }
+        
+        /* --- 表格區塊 --- */
+        .table-section { background: var(--surface); border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); padding: 20px; }
+        .table-header-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .table-header-info h2 { margin: 0; font-size: 1.2rem; color: #334155; }
+        
+        /* 凍結窗格設定 */
+        .table-container { max-height: 550px; overflow-y: auto; overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+        table { width: 100%; border-collapse: separate; border-spacing: 0; white-space: nowrap; font-size: 0.95rem; }
+        th, td { padding: 12px 16px; text-align: right; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); }
+        th:last-child, td:last-child { border-right: none; }
+        
+        /* 凍結表頭 */
+        th { background: #f1f5f9; color: #475569; text-align: center; font-weight: 600; position: sticky; top: 0; z-index: 10; border-bottom: 2px solid #cbd5e1; box-shadow: 0 1px 0 #cbd5e1; }
+        td:first-child { text-align: center; font-weight: 600; color: #475569; background: #f8fafc; position: sticky; left: 0; z-index: 5; border-right: 2px solid var(--border); }
+        th:first-child { z-index: 15; left: 0; border-right: 2px solid #cbd5e1; }
+        
+        tr:hover td { background: #f1f5f9; }
+        tr:hover td:first-child { background: #e2e8f0; } /* 確保 hover 時第一欄顏色也跟著變 */
+        
+        .total-row td { background-color: #f1f5f9; font-weight: bold; border-top: 2px solid #94a3b8; border-bottom: none; }
+        .total-row td:first-child { background-color: #e2e8f0; color: #1e293b; }
+        
+        /* 文字顏色 */
+        .text-red { color: var(--red); font-weight: bold; }
+        .text-green { color: var(--green); font-weight: bold; }
+        #statusMessage { font-weight: 600; }
     </style>
 </head>
 <body>
-    <h1>📈 台股 2330 籌碼數據儀表板</h1>
-    
-    <div class="card">
-        <h2 class="card-title">🔍 歷史區間查詢</h2>
-        <div class="form-group"><label>開始日期：</label><input type="date" id="startDate"></div>
-        <div class="form-group"><label>結束日期：</label><input type="date" id="endDate"></div>
-        <button onclick="fetchRangeData()">載入表格資料</button>
+    <div class="dashboard-container">
+        <div class="header">
+            <h1>📊 台股 2330 籌碼分析儀表板</h1>
+        </div>
         
-        <div id="tableStatus"></div>
-        <div class="table-container" id="tableContainer">
-            <p style="color: #94a3b8; text-align: center; margin-top: 20px;">請選擇區間並點擊載入，表格將顯示於此。</p>
+        <!-- 控制列 -->
+        <div class="control-bar">
+            <div class="form-group">
+                <label>📅 查詢區間：</label>
+                <input type="date" id="startDate">
+                <span style="color: #94a3b8; font-weight: bold;">~</span>
+                <input type="date" id="endDate">
+            </div>
+            <button onclick="fetchRangeData()">載入數據</button>
+            <div id="tableStatus" style="margin-left: auto;"></div>
+        </div>
+
+        <!-- 數據總覽 (KPI Cards) -->
+        <div id="kpiContainer" class="kpi-grid">
+            <!-- 卡片會由 JS 動態生成 -->
+        </div>
+
+        <!-- 表格區塊 -->
+        <div class="table-section">
+            <div class="table-header-info">
+                <h2>📋 每日詳細數據</h2>
+            </div>
+            <div class="table-container" id="tableContainer">
+                <p style="color: #94a3b8; text-align: center; margin-top: 40px; margin-bottom: 40px;">請於上方選擇日期區間並點擊載入，數據將顯示於此。</p>
+            </div>
         </div>
     </div>
 
     <script>
+        // 數字顏色格式化
         function formatNumberColor(val) {
             if (!val || val === '-') return val;
             let num = parseFloat(String(val).replace(/,/g, ''));
@@ -56,16 +115,46 @@
             return val;
         }
 
+        // 畫出上方的 KPI 總覽卡片
+        function renderKPICards(totals, columns) {
+            const container = document.getElementById('kpiContainer');
+            container.innerHTML = ''; // 清空舊卡片
+            
+            // 我們挑選前 4 個可以加總的欄位來當作 KPI
+            let kpiCount = 0;
+            for (let col of columns) {
+                if (totals[col].isSummable && kpiCount < 4) {
+                    let sumVal = totals[col].sum;
+                    let formattedSum = sumVal.toLocaleString('en-US');
+                    let colorClass = sumVal > 0 ? 'text-red' : (sumVal < 0 ? 'text-green' : '');
+                    let sign = sumVal > 0 ? '+' : ''; // 正數加個 + 號更有感覺
+
+                    container.innerHTML += `
+                        <div class="kpi-card">
+                            <div class="kpi-title">累積${col}</div>
+                            <div class="kpi-value ${colorClass}">${sign}${formattedSum}</div>
+                        </div>
+                    `;
+                    kpiCount++;
+                }
+            }
+            
+            // 如果有生出卡片，就把容器顯示出來
+            container.style.display = kpiCount > 0 ? 'grid' : 'none';
+        }
+
         async function fetchRangeData() {
             const start = document.getElementById('startDate').value;
             const end = document.getElementById('endDate').value;
             const container = document.getElementById('tableContainer');
             const statusDiv = document.getElementById('tableStatus');
+            const kpiContainer = document.getElementById('kpiContainer');
             
-            if (!start || !end) { statusDiv.innerHTML = "<span style='color:red;'>請選擇完整的開始與結束日期！</span>"; return; }
-            if (start > end) { statusDiv.innerHTML = "<span style='color:red;'>開始日期不能大於結束日期！</span>"; return; }
+            if (!start || !end) { statusDiv.innerHTML = "<span style='color:var(--red);'>請選擇完整的區間！</span>"; return; }
+            if (start > end) { statusDiv.innerHTML = "<span style='color:var(--red);'>開始日期不能大於結束日期！</span>"; return; }
 
-            statusDiv.innerHTML = "資料載入中...";
+            statusDiv.innerHTML = "⏳ 資料載入中...";
+            kpiContainer.style.display = 'none'; // 載入時先隱藏卡片
             
             try {
                 const response = await fetch(`stock_data.json?t=${new Date().getTime()}`);
@@ -74,19 +163,17 @@
                 let availableDates = Object.keys(data).filter(d => d >= start && d <= end).sort();
                 
                 if (availableDates.length === 0) {
-                    statusDiv.innerHTML = `<span style='color:red;'>這個區間內沒有任何資料。(系統每日自動爬蟲，若有缺漏將於今日下午自動補齊)</span>`;
-                    container.innerHTML = "";
+                    statusDiv.innerHTML = `<span style='color:var(--text-muted);'>此區間暫無資料。</span>`;
+                    container.innerHTML = `<p style="color: #94a3b8; text-align: center; margin-top: 40px; margin-bottom: 40px;">無符合的資料</p>`;
                     return;
                 }
 
                 let allKeys = new Set();
                 availableDates.forEach(d => {
                     Object.keys(data[d]).forEach(mainKey => {
-                        // 🚀 確保主外層排除 Error
                         if (mainKey === 'Stock ID' || mainKey === 'Error' || mainKey === '資料日期' || mainKey === '交易日期') return;
                         if (typeof data[d][mainKey] === 'object' && data[d][mainKey] !== null) {
                             Object.keys(data[d][mainKey]).forEach(subKey => {
-                                // 🚀 確保內層（小箱子裡）也徹底排除 Error 欄位
                                 if (subKey !== '資料日期' && subKey !== '交易日期' && subKey !== 'Error') allKeys.add(subKey);
                             });
                         } else {
@@ -94,6 +181,8 @@
                         }
                     });
                 });
+                
+                // 把欄位轉成陣列 (您可以針對這行做排序，如果想固定某些欄位在前面的話)
                 const columns = Array.from(allKeys);
 
                 let totals = {};
@@ -142,11 +231,16 @@
                 });
                 html += `</tr></tbody></table>`;
                 
+                // 畫出表格
                 container.innerHTML = html;
-                statusDiv.innerHTML = `<span style='color:green;'>✅ 成功載入 ${availableDates.length} 筆資料！</span>`;
+                
+                // 畫出 KPI 卡片
+                renderKPICards(totals, columns);
+                
+                statusDiv.innerHTML = `<span style='color:var(--green);'>✅ 成功載入 ${availableDates.length} 筆資料</span>`;
                 
             } catch (error) {
-                statusDiv.innerHTML = "<span style='color:red;'>讀取資料庫失敗。</span>";
+                statusDiv.innerHTML = "<span style='color:var(--red);'>讀取資料庫失敗。</span>";
             }
         }
     </script>
