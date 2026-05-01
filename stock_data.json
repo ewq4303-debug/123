@@ -523,5 +523,15 @@
     "Holders": {
       "Error": "找不到符合格式的持股資料"
     }
+  },
+  "2026-05-01": {
+    "Stock ID": "2330",
+    "Institutional": {
+      "資料日期": ""
+    },
+    "Margin": null,
+    "Holders": {
+      "Error": "找不到符合格式的持股資料"
+    }
   }
 }
